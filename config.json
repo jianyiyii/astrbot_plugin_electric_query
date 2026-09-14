@@ -1,0 +1,18 @@
+{
+    "building": "2号公寓",
+    "room": "319",
+    "meter_types": ["照明", "空调"],
+    "query_url": "https://card.sdcivc.edu.cn/bc/gateway",
+    "cache_ttl": 300,
+    "timeout": 15,
+    "retries": 2,
+    "check_enabled": true,
+    "check_interval_hours": 6,
+    "warn_threshold": 20.0,
+    "alert_threshold": 10.0,
+    "warn_repeat_hours": 24,
+    "alert_repeat_hours": 6,
+    "watch_rooms": [],
+    "notify_sessions": [],
+    "recharge_url": "https://card.sdcivc.edu.cn/#/pages/home/sdwhcyxy-card/electronic-pay"
+}

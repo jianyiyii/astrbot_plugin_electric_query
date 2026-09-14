@@ -1,0 +1,74 @@
+{
+  "building": {
+    "type": "string",
+    "default": "2号公寓",
+    "description": "默认楼栋",
+    "hint": "支持 2 / 2号楼 / 2号公寓 等写法"
+  },
+  "room": {
+    "type": "string",
+    "default": "319",
+    "description": "默认房间号",
+    "hint": ""
+  },
+  "cache_ttl": {
+    "type": "int",
+    "default": 300,
+    "description": "查询结果缓存秒数",
+    "hint": "缓存期内重复查询不发起网络请求"
+  },
+  "timeout": {
+    "type": "int",
+    "default": 15,
+    "description": "请求超时（秒）",
+    "hint": ""
+  },
+  "retries": {
+    "type": "int",
+    "default": 2,
+    "description": "请求失败重试次数",
+    "hint": ""
+  },
+  "check_enabled": {
+    "type": "bool",
+    "default": true,
+    "description": "开启定时低电量监控",
+    "hint": "关闭后不再自动检查与提醒"
+  },
+  "check_interval_hours": {
+    "type": "float",
+    "default": 6.0,
+    "description": "自动检查间隔（小时）",
+    "hint": "6 = 每 6 小时一次；24 = 每天一次"
+  },
+  "warn_threshold": {
+    "type": "float",
+    "default": 20.0,
+    "description": "普通提醒阈值（度）",
+    "hint": "剩余电量低于此值发普通提醒 ⚠️"
+  },
+  "alert_threshold": {
+    "type": "float",
+    "default": 10.0,
+    "description": "强提醒阈值（度）",
+    "hint": "剩余电量低于此值发强提醒 🚨"
+  },
+  "warn_repeat_hours": {
+    "type": "float",
+    "default": 24.0,
+    "description": "普通提醒重复间隔（小时）",
+    "hint": "同级别提醒最短重复间隔"
+  },
+  "alert_repeat_hours": {
+    "type": "float",
+    "default": 6.0,
+    "description": "强提醒重复间隔（小时）",
+    "hint": "同级别提醒最短重复间隔"
+  },
+  "recharge_url": {
+    "type": "string",
+    "default": "https://card.sdcivc.edu.cn/#/pages/home/sdwhcyxy-card/electronic-pay",
+    "description": "充值入口链接（仅提示，支付手动完成）",
+    "hint": ""
+  }
+}

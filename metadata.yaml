@@ -1,0 +1,11 @@
+name: electric_query
+display_name: 山文宿舍电费查询
+author: AstrBot User
+version: "3.3.0"
+desc: 山文宿舍电费查询——山东文化产业职业学院宿舍电费/剩余电量查询与低电量定时提醒（公开接口，无需登录/token）。指令：电费 / 查询电费 / 电量 [房间号]
+short_desc: 查宿舍剩余电量，低电量定时分级提醒，充值入口导航
+repo: ""
+astrbot_version: ">=4.11.0"
+support_platforms:
+  - aiocqhttp
+help: 「电费 2-319」查剩余电量；每6小时自动检查，剩余<20度普通提醒、<10度强提醒；充值仅给官方入口链接，支付手动完成。
