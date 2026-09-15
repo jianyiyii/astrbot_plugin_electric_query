@@ -1,20 +1,36 @@
-# 山文宿舍电费查询 (astrbot_plugin_electric_query)
+# 山文宿舍电费查询 (astrbot_plugin_electric_query) —— 宿舍电量管家
 
-面向 **山东文化产业职业学院（山文）** 学生的 AstrBot 插件：宿舍电费/剩余电量查询、
-低电量定时分级提醒、快捷充值入口导航。
+面向 **山东文化产业职业学院（山文）** 学生的 AstrBot 插件：电费查询、历史统计、
+耗电分析、断电预测与提前提醒。
 
 - 数据来源：校园一卡通 `card.sdcivc.edu.cn` 公开接口，**无需登录、无需 token**
-- 充值只提供官方入口链接，支付由学生在微信手动完成，插件不涉及任何支付
-- WebUI 可视化配置：监控开关、检查间隔、提醒阈值等全部可在 AstrBot 面板调整
+- 只读查询，不涉及任何支付；充值仅提供官方入口链接，由学生在微信手动完成
+- 历史数据存本地 SQLite（`electric_history.db`），不采集任何个人信息
 
-## 功能
+## 功能总览
 
 | 功能 | 说明 | 指令 |
 |---|---|---|
-| 电量查询 | 实时剩余电量（照明/空调分表） | `电费`、`电费 319`、`电费 2-319` |
-| 用法说明 | 查询示例 | `电费帮助` |
-| 自动监控 | 每 6 小时（WebUI 可调）自动查询 | 无需指令 |
-| 分级提醒 | `<20度` 普通提醒 ⚠️；`<10度` 强提醒 🚨（附充值入口） | 自动推送 |
+| 电量查询 | 实时剩余电量（照明/空调分表），自动写入历史库 | `电费`、`电费 2-319` |
+| 用电统计 | 最近 24h 消耗、7 天日均、最高耗电时段 | `用电统计 [房间号]` |
+| 断电预测 | 线性回归+移动平均，预计断电时间 | `预测停电 [房间号]` |
+| 用电趋势 | 今日 vs 昨日消耗与变化 | `用电趋势 [房间号]` |
+| 智能提醒 | 按预计断电时间分级：>24h 不提醒 / 12-24h 普通 ⚠️ / <12h 强提醒 🚨 / <3h 紧急 🔥 | 自动推送 |
+| 夜间断电保护 | 每天 22:00 检查，预测凌晨 0-8 点断电则提醒 🌙 | 自动推送 |
+
+> 提醒规则：固定阈值（按剩余度数）与预测式（按预计断电剩余小时）是两条独立通道，
+> 各级别的开关（`enable_*`）可分别启停：某级别被关闭时自动降到下一已启用级别
+> （例如关闭强提醒但保留普通提醒，则强级别事件按普通级别提醒）；全关则静默。
+> 预测数据不足时自动回退固定阈值。智能提醒以「预计断电剩余小时」为准，>24 小时不打扰。
+
+## 数据与算法
+
+- **存储**：SQLite `electric_history.db` → 表 `power_history(id, room, meter_type, remaining_power, created_at)`。
+  每次拿到新鲜电量数据自动记录（60 秒内重复采样去重；按 `history_keep_days` 自动清理）。
+- **断电预测**：优先对「最后一次充值之后」的采样做最小二乘线性拟合得到每小时耗电速度；
+  拟合不可信（跨度 <30 分钟）或失败时回退移动平均；再不行则提示数据不足。
+- **统计口径**：窗口消耗只累计相邻采样间的「剩余下降量」，自动忽略充值跳变；
+  日均按实际数据跨度折算到 24 小时。
 
 ## 接口（公开，2026-09-14 实测有效）
 
@@ -25,9 +41,7 @@ POST {base}/ecu/api/roomInfo/query/1   body {"loudongId": null}    → 楼栋列
 POST {base}/ecu/api/roomInfo/query/2   body {"loudongId": 楼栋id}   → 房间表具列表
 ```
 
-房间条目：`{loudong, loudongId, room("2-319照明"), roomId, allAmp, usedAmp}`，
-**剩余电量 = allAmp − usedAmp（度）**。同一房间有 照明 / 空调 / 水表 三块表，
-默认展示 照明 + 空调。
+剩余电量 = `allAmp − usedAmp`（度）。同一房间有 照明 / 空调 / 水表 三块表，默认展示 照明+空调。
 
 ## 安装（AstrBot）
 
@@ -39,94 +53,116 @@ POST {base}/ecu/api/roomInfo/query/2   body {"loudongId": 楼栋id}   → 房间
 
 | 配置项 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `building` | 文本 | `2号公寓` | 默认楼栋（支持 2 / 2号楼 / 2号公寓） |
-| `room` | 文本 | `319` | 默认房间号 |
-| `cache_ttl` | 数字 | `300` | 查询结果缓存秒数 |
-| `timeout` | 数字 | `15` | 请求超时（秒） |
-| `retries` | 数字 | `2` | 请求失败重试次数 |
-| `check_enabled` | 开关 | 开 | 定时低电量监控总开关 |
-| `check_interval_hours` | 数字 | `6` | 自动检查间隔（小时），24=每天一次 |
-| `warn_threshold` | 数字 | `20` | 普通提醒阈值（度）⚠️ |
-| `alert_threshold` | 数字 | `10` | 强提醒阈值（度）🚨 |
-| `warn_repeat_hours` | 数字 | `24` | 普通提醒重复间隔（小时） |
-| `alert_repeat_hours` | 数字 | `6` | 强提醒重复间隔（小时） |
-| `recharge_url` | 文本 | 官方充值页 | 提醒附带的充值入口链接 |
+| `building` / `room` | 文本 | `2号公寓` / `319` | 默认宿舍 |
+| `cache_ttl` | 数字 | `300` | 查询缓存秒数 |
+| `timeout` / `retries` | 数字 | `15` / `2` | 请求超时与重试 |
+| `history_keep_days` | 数字 | `30` | 历史数据保留天数 |
+| `check_enabled` | 开关 | 开 | 定时监控总开关 |
+| `check_interval_hours` | 数字 | `6` | 检查间隔（小时） |
+| `warn_threshold` / `alert_threshold` | 数字 | `20` / `10` | 固定阈值回退（度） |
+| `warn_hours` / `alert_hours` / `urgent_hours` | 数字 | `24` / `12` / `3` | 预测式提醒分级（小时） |
+| `enable_degree_warn` / `enable_degree_alert` | 开关 | 开 / 开 | 固定阈值-普通/强提醒 独立开关 |
+| `enable_hour_warn` / `enable_hour_alert` / `enable_hour_urgent` | 开关 | 开×3 | 预测式-普通/强/紧急提醒 独立开关 |
+| `warn_repeat_hours` / `alert_repeat_hours` | 数字 | `24` / `6` | 同级别重复提醒间隔 |
+| `night_check_enabled` / `night_check_time` | 开关 / 文本 | 开 / `22:00` | 夜间断电保护 |
+| `recharge_url` | 文本 | 官方充值页 | 提醒附带的充值入口 |
 
-> 插件目录内 `config.json` 仍是初始默认值来源；在 WebUI 修改后，以 AstrBot
-> 数据目录 `data/config/electric_query_config.json` 为准。
-> `meter_types`（表具类型，`[]`=全部）、`watch_rooms`（额外监控房间，
-> 如 `["2号公寓:319","5号公寓:206"]`）、`notify_sessions`（指定推送会话，
-> 留空=自动记住使用过指令的会话）三个列表字段暂未进 WebUI，可直接改 `config.json`。
+> 插件目录内 `config.json` 为初始默认值；在 WebUI 修改后以
+> `data/config/electric_query_config.json` 为准。
+> `meter_types`（表具类型）、`watch_rooms`（额外监控房间）、`notify_sessions`
+> （指定推送会话）三个列表字段暂未进 WebUI，可直接改 `config.json`。
 
 ## 使用示例
 
 ```
-学生：电费
+学生：电费 2-319
 机器人：🏠 宿舍查询结果
 
-        💡 2-319照明：5.38 度
-        ❄️ 2-319空调：0.68 度
+        💡 2-319照明：4.04 度
+        ❄️ 2-319空调：7.27 度
 
-        📅 查询时间：2026-09-14 20:30
+        📅 查询时间：2026-09-15 13:21
 
-学生：电费 2-319
-学生：电量 5-206
+学生：预测停电
+机器人：⚡ 电量预测（2号公寓 319）
+
+        ❄️ 空调：剩余 7.27 度
+        每小时消耗 0.60 度
+        预计还能使用 12.1 小时
+        预计断电时间：2026-09-16 01:28
+
+学生：用电统计
+机器人：📊 用电统计（2号公寓 319）
+
+        最近24小时：
+        ❄️ 空调：消耗 12.73 度
+
+        最近7天：
+        平均每天消耗：16.97 度
+
+        最高耗电时间段：11:23 - 13:23（4.73 度）
+
+学生：用电趋势
+机器人：📈 用电趋势（2号公寓 319）
+
+        ❄️ 空调：今日 9.73 度 / 昨日 2.00 度 / 变化 +386.5%
 ```
 
-低电量提醒（自动推送）：
+提醒示例（预测式分级，自动推送）：
 
 ```
-🚨 电量严重不足，请立即充值！
+🚨 即将断电：预计今晚 18:21 左右
 
 🏠 2号公寓 319
-💡 2-319照明：5.38 度
-❄️ 2-319空调：0.68 度
-剩余仅 0.68 度（低于 10 度强提醒线）
+❄️ 2-319空调：2.50 度
 
 👉 充值入口：https://card.sdcivc.edu.cn/#/pages/home/sdwhcyxy-card/electronic-pay
 （微信打开后选楼栋→选房间→选金额，支付请手动确认）
-📅 2026-09-14 20:30
+📅 2026-09-15 13:21
+```
+
+夜间保护示例（每天 22:00 检查）：
+
+```
+🌙 夜间断电风险
+
+预计：凌晨 03:30 断电
+当前剩余：❄️ 2-319空调 1.50 度
+
+建议提前充值。
+👉 充值入口：...
 ```
 
 ## 数据来源与隐私
 
-- 数据来源：山东文化产业职业学院校园一卡通公开接口 `card.sdcivc.edu.cn/bc/gateway`，
-  仅查询楼栋与房间电表读数。
-- **不保存任何登录凭据**：无需账号密码、无需 token、不保存 Cookie，任何情况下
-  都不会触发登录或支付流程。
-- 插件只读：只调用查询类接口，不触碰下单/支付接口。
+- 只查询公开的楼栋/房间电表读数；**不保存任何登录凭据**（无账号密码、无 token、无 Cookie）。
+- 历史电量仅存本机 SQLite，不对外发送；删除插件目录 `electric_history.db` 即清除全部数据。
+
+## 常见问题
+
+- **提示「历史数据不足」**：预测/统计需要至少 2 个采样点（建议间隔数小时）。
+  多查询几次「电费」或等待定时检查自动积累即可。
+- **预测值异常大/小**：数据跨度不足 30 分钟时会拒绝线性拟合；充值和用电波动大时
+  以移动平均兜底。数据越多样本越准。
+- **提示「查询结果为空」**：房间号写错，或该房间只有水表而被 `meter_types` 过滤。
+- **收不到提醒**：先发一次 `电费` 让插件记住会话，或在 `notify_sessions` 显式填写
+  会话 ID（形如 `aiocqhttp:GroupMessage:123456789`）。
 
 ## 发布到 GitHub
 
-仓库结构（**插件文件平铺在仓库根**，与 AstrBot 社区惯例一致）：
+仓库根 = 插件根（平铺）：
 
 ```
-astrbot_plugin_electric_query/          ← GitHub 仓库根（= 插件根）
+astrbot_plugin_electric_query/
 ├── README.md
 ├── requirements.txt
 ├── metadata.yaml
 ├── main.py
-├── config.json
-├── _conf_schema.json
-├── __init__.py
-├── logo.png  (可选：插件图标，WebUI 中显示)
-└── LICENSE   (推荐：如 MIT)
+├── database.py / forecast.py / statistics.py
+├── config.json / _conf_schema.json / __init__.py
+└── LICENSE (推荐) / logo.png (可选)
 ```
 
-上传后建议：
-
-1. 把 `metadata.yaml` 与 `main.py` 里 `@register` 的 `repo` 字段改成你的仓库地址。
-2. 把 `metadata.yaml` 的 `author` 改成你的 GitHub 用户名。
-3. 附带开源协议（如 MIT）`LICENSE` 文件。
-4. GitHub Release 里附上 `electric_query.zip` 供 WebUI 一键导入
-   （zip 内为插件文件或带一层文件夹均可，AstrBot 导入时会自动处理）。
-5. 参考仓库示例（同类项目，含更多进阶玩法）：
-   https://github.com/Scarbal486/astrbot_plugin_buaa_power
-
-## 常见问题
-
-- **提示「查询结果为空」**：房间号写错，或该房间只有水表而被 `meter_types` 过滤。
-- **收不到自动提醒**：先发一次 `电费` 让插件记住会话，或在 `notify_sessions`
-  里显式填写会话 ID（形如 `aiocqhttp:GroupMessage:123456789`）。
-- **接口变更排查**：Chrome 打开一卡通 → F12 → Network → Fetch/XHR，重放上述
-  两个请求对比 URL/参数/响应即可定位变化。
+上传后把 `metadata.yaml` 与 `main.py` 里 `@register` 的 `repo` 改成你的仓库地址，
+`author` 改成你的 GitHub 用户名；GitHub Release 附上 `electric_query.zip` 供一键导入。
+同类参考项目：https://github.com/Scarbal486/astrbot_plugin_buaa_power
