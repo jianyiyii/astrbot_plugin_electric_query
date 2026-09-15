@@ -1,135 +1,175 @@
 {
-  "building": {
-    "type": "string",
-    "default": "2号公寓",
-    "description": "默认楼栋",
-    "hint": "支持 2 / 2号楼 / 2号公寓 等写法"
+  "basic": {
+    "type": "object",
+    "default": {},
+    "description": "基础设置",
+    "hint": "宿舍与查询参数",
+    "items": {
+      "building": {
+        "type": "string",
+        "default": "2号公寓",
+        "description": "默认楼栋",
+        "hint": "支持 2 / 2号楼 / 2号公寓 等写法"
+      },
+      "room": {
+        "type": "string",
+        "default": "319",
+        "description": "默认房间号",
+        "hint": ""
+      },
+      "cache_ttl": {
+        "type": "int",
+        "default": 300,
+        "description": "查询结果缓存秒数",
+        "hint": "缓存期内重复查询不发起网络请求"
+      },
+      "timeout": {
+        "type": "int",
+        "default": 15,
+        "description": "请求超时（秒）",
+        "hint": ""
+      },
+      "retries": {
+        "type": "int",
+        "default": 2,
+        "description": "请求失败重试次数",
+        "hint": ""
+      },
+      "history_keep_days": {
+        "type": "int",
+        "default": 30,
+        "description": "历史电量数据保留天数",
+        "hint": "超期记录自动清理，用于统计与预测"
+      },
+      "check_enabled": {
+        "type": "bool",
+        "default": true,
+        "description": "开启定时低电量监控",
+        "hint": "关闭后不再自动检查与提醒"
+      },
+      "check_interval_hours": {
+        "type": "float",
+        "default": 6.0,
+        "description": "自动检查间隔（小时）",
+        "hint": "6 = 每 6 小时一次；24 = 每天一次"
+      }
+    }
   },
-  "room": {
-    "type": "string",
-    "default": "319",
-    "description": "默认房间号",
-    "hint": ""
+  "fixed_alerts": {
+    "type": "object",
+    "default": {},
+    "description": "固定阈值提醒（按剩余度数）",
+    "hint": "预测不可用时的回退通道；级别禁用自动降级到下一已启用级别",
+    "items": {
+      "enable_degree_warn": {
+        "type": "bool",
+        "default": true,
+        "description": "普通提醒开关",
+        "hint": "开启后，剩余电量低于下方阈值（度）时发普通提醒"
+      },
+      "warn_threshold": {
+        "type": "float",
+        "default": 20.0,
+        "description": "普通提醒线（度）",
+        "hint": "剩余低于此值时触发上方开关的普通提醒"
+      },
+      "enable_degree_alert": {
+        "type": "bool",
+        "default": true,
+        "description": "强提醒开关",
+        "hint": "开启后，剩余电量低于下方阈值（度）时发强提醒"
+      },
+      "alert_threshold": {
+        "type": "float",
+        "default": 10.0,
+        "description": "强提醒线（度）",
+        "hint": "剩余低于此值时触发上方开关的强提醒"
+      }
+    }
   },
-  "cache_ttl": {
-    "type": "int",
-    "default": 300,
-    "description": "查询结果缓存秒数",
-    "hint": "缓存期内重复查询不发起网络请求"
+  "prediction_alerts": {
+    "type": "object",
+    "default": {},
+    "description": "预测式提醒（按预计断电时间）",
+    "hint": "基于历史耗电速度预测；级别禁用自动降级到下一已启用级别",
+    "items": {
+      "enable_hour_warn": {
+        "type": "bool",
+        "default": true,
+        "description": "普通提醒开关",
+        "hint": "开启后，预计在下方小时数内断电时发普通提醒"
+      },
+      "warn_hours": {
+        "type": "float",
+        "default": 24.0,
+        "description": "普通提醒线（小时）",
+        "hint": "预计此小时内断电时触发上方开关的普通提醒"
+      },
+      "enable_hour_alert": {
+        "type": "bool",
+        "default": true,
+        "description": "强提醒开关",
+        "hint": "开启后，预计在下方小时数内断电时发强提醒"
+      },
+      "alert_hours": {
+        "type": "float",
+        "default": 12.0,
+        "description": "强提醒线（小时）",
+        "hint": "预计此小时内断电时触发上方开关的强提醒"
+      },
+      "enable_hour_urgent": {
+        "type": "bool",
+        "default": true,
+        "description": "紧急提醒开关",
+        "hint": "开启后，预计在下方小时数内断电时发紧急提醒"
+      },
+      "urgent_hours": {
+        "type": "float",
+        "default": 3.0,
+        "description": "紧急提醒线（小时）",
+        "hint": "预计此小时内断电时触发上方开关的紧急提醒"
+      }
+    }
   },
-  "timeout": {
-    "type": "int",
-    "default": 15,
-    "description": "请求超时（秒）",
-    "hint": ""
+  "repeat": {
+    "type": "object",
+    "default": {},
+    "description": "重复提醒间隔",
+    "hint": "同一级别提醒的最短重复间隔",
+    "items": {
+      "warn_repeat_hours": {
+        "type": "float",
+        "default": 24.0,
+        "description": "普通提醒重复间隔（小时）",
+        "hint": ""
+      },
+      "alert_repeat_hours": {
+        "type": "float",
+        "default": 6.0,
+        "description": "强/紧急提醒重复间隔（小时）",
+        "hint": ""
+      }
+    }
   },
-  "retries": {
-    "type": "int",
-    "default": 2,
-    "description": "请求失败重试次数",
-    "hint": ""
-  },
-  "history_keep_days": {
-    "type": "int",
-    "default": 30,
-    "description": "历史电量数据保留天数",
-    "hint": "超期记录自动清理，用于统计与预测"
-  },
-  "check_enabled": {
-    "type": "bool",
-    "default": true,
-    "description": "开启定时低电量监控",
-    "hint": "关闭后不再自动检查与提醒"
-  },
-  "check_interval_hours": {
-    "type": "float",
-    "default": 6.0,
-    "description": "自动检查间隔（小时）",
-    "hint": "6 = 每 6 小时一次；24 = 每天一次"
-  },
-  "enable_degree_warn": {
-    "type": "bool",
-    "default": true,
-    "description": "固定阈值-普通提醒开关",
-    "hint": "开启后，剩余电量低于下方阈值（度）时发普通提醒"
-  },
-  "warn_threshold": {
-    "type": "float",
-    "default": 20.0,
-    "description": "固定阈值-普通提醒线（度）",
-    "hint": "剩余低于此值时触发上方开关的普通提醒"
-  },
-  "enable_degree_alert": {
-    "type": "bool",
-    "default": true,
-    "description": "固定阈值-强提醒开关",
-    "hint": "开启后，剩余电量低于下方阈值（度）时发强提醒"
-  },
-  "alert_threshold": {
-    "type": "float",
-    "default": 10.0,
-    "description": "固定阈值-强提醒线（度）",
-    "hint": "剩余低于此值时触发上方开关的强提醒"
-  },
-  "enable_hour_warn": {
-    "type": "bool",
-    "default": true,
-    "description": "预测式-普通提醒开关",
-    "hint": "开启后，预计在下方小时数内断电时发普通提醒"
-  },
-  "warn_hours": {
-    "type": "float",
-    "default": 24.0,
-    "description": "预测式-普通提醒线（小时）",
-    "hint": "预计此小时内断电时触发上方开关的普通提醒"
-  },
-  "enable_hour_alert": {
-    "type": "bool",
-    "default": true,
-    "description": "预测式-强提醒开关",
-    "hint": "开启后，预计在下方小时数内断电时发强提醒"
-  },
-  "alert_hours": {
-    "type": "float",
-    "default": 12.0,
-    "description": "预测式-强提醒线（小时）",
-    "hint": "预计此小时内断电时触发上方开关的强提醒"
-  },
-  "enable_hour_urgent": {
-    "type": "bool",
-    "default": true,
-    "description": "预测式-紧急提醒开关",
-    "hint": "开启后，预计在下方小时数内断电时发紧急提醒"
-  },
-  "urgent_hours": {
-    "type": "float",
-    "default": 3.0,
-    "description": "预测式-紧急提醒线（小时）",
-    "hint": "预计此小时内断电时触发上方开关的紧急提醒"
-  },
-  "warn_repeat_hours": {
-    "type": "float",
-    "default": 24.0,
-    "description": "普通提醒重复间隔（小时）",
-    "hint": "同级别提醒最短重复间隔"
-  },
-  "alert_repeat_hours": {
-    "type": "float",
-    "default": 6.0,
-    "description": "强/紧急提醒重复间隔（小时）",
-    "hint": "同级别提醒最短重复间隔"
-  },
-  "night_check_enabled": {
-    "type": "bool",
-    "default": true,
-    "description": "夜间断电保护开关",
-    "hint": "开启后，到下方时间检查是否会在凌晨 0-8 点断电并提醒"
-  },
-  "night_check_time": {
-    "type": "string",
-    "default": "22:00",
-    "description": "夜间断电检查时间",
-    "hint": "24 小时制 HH:MM"
+  "night": {
+    "type": "object",
+    "default": {},
+    "description": "夜间断电保护",
+    "hint": "到点检查是否会在凌晨 0-8 点断电并提醒",
+    "items": {
+      "night_check_enabled": {
+        "type": "bool",
+        "default": true,
+        "description": "夜间断电保护开关",
+        "hint": "开启后，到下方时间检查凌晨断电风险"
+      },
+      "night_check_time": {
+        "type": "string",
+        "default": "22:00",
+        "description": "夜间断电检查时间",
+        "hint": "24 小时制 HH:MM"
+      }
+    }
   },
   "recharge_url": {
     "type": "string",

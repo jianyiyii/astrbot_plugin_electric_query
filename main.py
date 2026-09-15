@@ -226,17 +226,24 @@ class ElectricApiClient:
 # ---------------------------------------------------------------------------
 if filter is not None:
     @register("electric_query", "AstrBot User",
-              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.1.2",
+              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.2.0",
               "https://github.com/YourName/astrbot_plugin_electric_query")
     class ElectricQueryPlugin(Star):
         def __init__(self, context: Context, config: dict = None):
             super().__init__(context)
-            # 配置来源：config.json 初始默认值；AstrBot WebUI（_conf_schema.json）优先
+            # 配置来源：config.json 初始默认值；AstrBot WebUI（_conf_schema.json）优先。
+            # WebUI 配置可能是 object 分组结构，这里平铺合并回扁平键。
             self.cfg = load_config()
             if config:
                 try:
                     for k, v in dict(config).items():
-                        if v is not None:
+                        if v is None:
+                            continue
+                        if isinstance(v, dict):
+                            for kk, vv in v.items():
+                                if vv is not None:
+                                    self.cfg[kk] = vv
+                        else:
                             self.cfg[k] = v
                 except Exception as e:
                     logger.error(f"[electric_query] 读取 WebUI 配置失败: {e}")
