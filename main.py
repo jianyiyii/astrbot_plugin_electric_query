@@ -30,7 +30,7 @@ import logging
 import os
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 
@@ -226,7 +226,7 @@ class ElectricApiClient:
 # ---------------------------------------------------------------------------
 if filter is not None:
     @register("electric_query", "AstrBot User",
-              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.2.0",
+              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.4.0",
               "https://github.com/YourName/astrbot_plugin_electric_query")
     class ElectricQueryPlugin(Star):
         def __init__(self, context: Context, config: dict = None):
@@ -472,11 +472,39 @@ if filter is not None:
                     peak_line = f"最高耗电时间段：{peak[0]} - {peak[1]}（{peak[2]:.2f} 度）"
                 else:
                     peak_line = "最高耗电时间段：数据不足"
+                # 分时画像与近 7 天每日消耗（房间内各表聚合）
+                dp_day = dp_night = 0.0
+                dp_has = False
+                daily = {}
+                for m in meters:
+                    t = self._meter_type(m["room"])
+                    hist = self._history(building, room, t)
+                    dpart = stats.day_partition(hist, 7)
+                    if dpart["day_pct"] is not None:
+                        dp_has = True
+                        dp_day += dpart["day"]
+                        dp_night += dpart["night"]
+                    for d, c in stats.daily_consumptions(hist, 7):
+                        if c is not None:
+                            daily[d] = daily.get(d, 0.0) + c
+                extra_lines = []
+                if dp_has:
+                    total_dp = dp_day + dp_night
+                    d_pct = dp_day / total_dp * 100 if total_dp > 0 else 0
+                    n_pct = dp_night / total_dp * 100 if total_dp > 0 else 0
+                    extra_lines.append(
+                        f"分时段画像（近7天）：🌞 白天8-22点 {dp_day:.1f} 度 ({d_pct:.0f}%) / "
+                        f"🌙 夜间22-8点 {dp_night:.1f} 度 ({n_pct:.0f}%)")
+                if daily:
+                    extra_lines.append("近7天每日消耗：" + "  ".join(
+                        f"{d} {c:.1f}" for d, c in sorted(daily.items())))
                 text = (
                     f"📊 用电统计（{building} {room}）\n\n"
                     "最近24小时：\n" + "\n".join(lines_24) + "\n\n"
                     "最近7天：\n" + avg_line + "\n\n" + peak_line
                 )
+                if extra_lines:
+                    text += "\n\n" + "\n".join(extra_lines)
                 yield event.plain_result(text)
             except Exception as e:
                 logger.error(f"[electric_query] 用电统计失败: {e}")
@@ -502,11 +530,31 @@ if filter is not None:
                     icon = self._icon(t)
                     if pred["hours"] is not None:
                         any_ok = True
-                        blocks.append(
+                        block = (
                             f"{icon} {t}：剩余 {m['remain']:.2f} 度\n"
                             f"每小时消耗 {pred['rate']:.2f} 度\n"
                             f"预计还能使用 {pred['hours']:.1f} 小时\n"
                             f"预计断电时间：{pred['outage_iso'][:16]}")
+                        if pred.get("method") == "profile":
+                            extras = []
+                            h24 = pred.get("hours24")
+                            if h24 is not None:
+                                extras.append(
+                                    f"未来24小时预计消耗：{h24:.2f} 度"
+                                    f"（分时预测，保守系数 {forecast_mod.CONSERVATIVE_FACTOR}）")
+                            peaks = pred.get("peaks") or []
+                            if peaks:
+                                extras.append(
+                                    "未来24小时高峰时段：" +
+                                    "、".join(f"{a}（约 {r:.2f} 度/时）"
+                                              for a, r in peaks))
+                            pd = pred.get("profile_days")
+                            if pd is not None and pd < 7:
+                                extras.append(
+                                    f"分时数据积累中（覆盖 {pd} 天，数据越多越准）")
+                            if extras:
+                                block += "\n" + "\n".join(extras)
+                        blocks.append(block)
                     else:
                         blocks.append(f"{icon} {t}：{pred['reason']}")
                 head = f"⚡ 电量预测（{building} {room}）"
@@ -537,7 +585,7 @@ if filter is not None:
                 for m in meters:
                     t = self._meter_type(m["room"])
                     hist = self._history(building, room, t)
-                    today, yest = stats.today_vs_yesterday(hist)
+                    today, yest = stats.same_period_today_vs_yesterday(hist)
                     if today is None and yest is None:
                         lines.append(f"{self._icon(t)} {t}：数据不足")
                         continue
@@ -548,16 +596,17 @@ if filter is not None:
                     y_total += yest
                     if yest > 0:
                         chg = (today - yest) / yest * 100
-                        y_text = f"昨日 {yest:.2f} 度 / 变化 {chg:+.1f}%"
+                        y_text = f"昨日同期 {yest:.2f} 度 / 变化 {chg:+.1f}%"
                     else:
-                        y_text = "昨日无数据"
-                    lines.append(f"{self._icon(t)} {t}：今日 {today:.2f} 度 / {y_text}")
+                        y_text = "昨日同期无数据"
+                    lines.append(f"{self._icon(t)} {t}：今日 {today:.2f} 度（截至此刻）"
+                                 f" / {y_text}")
                 if has and y_total > 0:
                     chg = (t_total - y_total) / y_total * 100
-                    lines.append(f"合计：今日 {t_total:.2f} 度 / 昨日 {y_total:.2f} 度"
+                    lines.append(f"合计：今日 {t_total:.2f} 度 / 昨日同期 {y_total:.2f} 度"
                                  f" / 变化 {chg:+.1f}%")
                 yield event.plain_result(
-                    f"📈 用电趋势（{building} {room}）\n\n" + "\n".join(lines))
+                    f"📈 用电趋势（{building} {room}，同期对比）\n\n" + "\n".join(lines))
             except Exception as e:
                 logger.error(f"[electric_query] 用电趋势失败: {e}")
                 yield event.plain_result(f"❌ 趋势查询失败：{e}")
@@ -610,7 +659,8 @@ if filter is not None:
             """对房间各表做断电预测。
             返回 {"hours": 全房最早断电小时数 or None,
                   "outage": 对应断电时间 ISO,
-                  "meters": [{"meter", "type", "hours", "outage", "reason"}]}
+                  "meters": [{"meter","type","hours","outage","reason",
+                              "method","hours24","rate","peaks","profile_days"}]}
             """
             meters = await self._fetch_meters(building, room)
             per = []
@@ -621,7 +671,10 @@ if filter is not None:
                 hist = self._history(building, room, t)
                 pred = forecast_mod.predict(hist, remaining=m["remain"])
                 per.append({"meter": m, "type": t, "hours": pred["hours"],
-                            "outage": pred["outage_iso"], "reason": pred["reason"]})
+                            "outage": pred["outage_iso"], "reason": pred["reason"],
+                            "method": pred["method"], "hours24": pred["hours24"],
+                            "rate": pred["rate"], "peaks": pred.get("peaks", []),
+                            "profile_days": pred.get("profile_days")})
                 if pred["hours"] is not None:
                     if room_hours is None or pred["hours"] < room_hours:
                         room_hours = pred["hours"]
@@ -765,25 +818,65 @@ if filter is not None:
                     continue
                 if pred["hours"] is None:
                     continue
-                # 找出预计在凌晨 0-8 点断电、且当前电量偏低的表
+                # 今夜窗口：下一个 00:00 - 08:00
+                now = datetime.now()
+                midnight = (now + timedelta(days=1)).replace(hour=0, minute=0,
+                                                             second=0, microsecond=0)
+                window_end = midnight + timedelta(hours=8)
+                # 找出「今夜有断电风险」且当前电量偏低的表
                 risk = None
                 for p in pred["meters"]:
-                    if p["hours"] is None or not p["outage"]:
+                    m = p["meter"]
+                    if m["remain"] >= warn_deg:
                         continue
-                    try:
-                        hour = datetime.strptime(p["outage"][:16], "%Y-%m-%d %H:%M").hour
-                    except (ValueError, TypeError):
-                        continue
-                    if 0 <= hour < 8 and p["meter"]["remain"] < warn_deg:
-                        if risk is None or p["hours"] < risk["hours"]:
-                            risk = p
+                    hist = self._history(building, room, p["type"])
+                    prof = forecast_mod.build_hour_profile(hist)
+                    if prof:
+                        # 从今夜 00:00 起按分时曲线模拟：断电须落在今夜窗口内才算风险
+                        hours, outage = forecast_mod.sim_deplete(prof, m["remain"],
+                                                                 now=midnight)
+                        in_window = False
+                        if outage:
+                            try:
+                                out_dt = datetime.strptime(outage[:16], "%Y-%m-%d %H:%M")
+                                in_window = midnight <= out_dt < window_end
+                            except (ValueError, TypeError):
+                                in_window = False
+                        night_usage = forecast_mod.usage_between(prof, midnight,
+                                                                 window_end)
+                        if in_window or (night_usage > m["remain"]):
+                            p["night_usage"] = night_usage
+                            p["night_outage"] = outage if in_window else None
+                            if risk is None or p["hours"] < risk["hours"]:
+                                risk = p
+                    else:
+                        # Profile 不可用：回退到「预计断电时刻在今晚窗口内」的判定
+                        if not p["outage"]:
+                            continue
+                        try:
+                            out_dt = datetime.strptime(p["outage"][:16],
+                                                       "%Y-%m-%d %H:%M")
+                        except (ValueError, TypeError):
+                            continue
+                        if midnight <= out_dt < window_end:
+                            p["night_usage"] = None
+                            p["night_outage"] = p["outage"]
+                            if risk is None or p["hours"] < risk["hours"]:
+                                risk = p
                 if not risk:
                     continue
                 self._night_sent[nkey] = today
                 self._save_data()
                 m = risk["meter"]
+                if risk.get("night_outage"):
+                    line = f"预计：凌晨 {risk['night_outage'][11:16]} 断电"
+                elif risk.get("night_usage") is not None:
+                    line = (f"预计今夜（0-8点）耗电约 {risk['night_usage']:.2f} 度，"
+                            f"已超过当前剩余")
+                else:
+                    line = f"预计：凌晨 {risk['outage'][11:16]} 断电"
                 text = (f"🌙 夜间断电风险\n\n"
-                        f"预计：凌晨 {risk['outage'][11:16]} 断电\n"
+                        f"{line}\n"
                         f"当前剩余：{self._icon(risk['type'])} {m['room']} "
                         f"{m['remain']:.2f} 度\n\n"
                         f"建议提前充值。\n{self._recharge_hint()}")
