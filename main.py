@@ -26,9 +26,9 @@
 
 import asyncio
 import json
-import logging
 import os
 import re
+import shutil
 import time
 from datetime import datetime, timedelta
 
@@ -38,10 +38,10 @@ try:
     # AstrBot >= v3.4 推荐导入路径
     from astrbot.api.star import Context, Star, register
     from astrbot.api.event import filter, AstrMessageEvent
-    from astrbot.api import logger as _astrbot_logger
+    from astrbot.api import logger
 except ImportError:  # 兼容旧版本 AstrBot
     from astrbot.core.star import Context, Star, register
-    from astrbot.api import logger as _astrbot_logger
+    from astrbot.api import logger
     from astrbot.core.star.filter.event import EventType
 
     filter = None
@@ -50,11 +50,9 @@ from . import database
 from . import forecast as forecast_mod
 from . import statistics as stats
 
-# 日志优先接入 AstrBot（WebUI / 日志文件可见）；独立运行等场景回落到标准 logging。
-logger = _astrbot_logger if _astrbot_logger is not None else logging.getLogger("electric_query")
-
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(PLUGIN_DIR, "data.json")
+# v4.5.0 起持久化数据统一存到 AstrBot 约定目录 data/plugin_data/electric_query/
+DATA_FILE = os.path.join(database.get_data_dir(), "data.json")
 
 METER_TYPES = ("照明", "空调", "水表")
 METER_ICONS = {"照明": "💡", "空调": "❄️", "水表": "🚰"}
@@ -268,6 +266,13 @@ if filter is not None:
 
         # ---------------- 持久化 ----------------
         def _load_data(self):
+            # 旧版本 data.json 在插件目录，首次启动搬移到新目录
+            legacy = os.path.join(PLUGIN_DIR, "data.json")
+            if not os.path.exists(DATA_FILE) and os.path.exists(legacy):
+                try:
+                    shutil.copy2(legacy, DATA_FILE)
+                except OSError:
+                    pass
             try:
                 if os.path.exists(DATA_FILE):
                     with open(DATA_FILE, "r", encoding="utf-8") as f:

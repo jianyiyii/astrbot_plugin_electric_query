@@ -158,3 +158,22 @@ POST {base}/ecu/api/roomInfo/query/2   body {"loudongId": 楼栋id}   → 房间
 - **提示「查询结果为空」**：房间号写错，或该房间只有水表而被 `meter_types` 过滤。
 - **收不到提醒**：先发一次 `电费` 让插件记住会话，或在 `notify_sessions` 显式填写
   会话 ID（形如 `aiocqhttp:GroupMessage:123456789`）。
+
+## 发布到 GitHub
+
+仓库根 = 插件根（平铺）：
+
+```
+astrbot_plugin_electric_query/
+├── README.md
+├── requirements.txt
+├── metadata.yaml
+├── main.py
+├── database.py / forecast.py / statistics.py
+├── config.json / _conf_schema.json / __init__.py
+└── LICENSE (推荐) / logo.png (可选)
+```
+
+上传后把 `metadata.yaml` 与 `main.py` 里 `@register` 的 `repo` 改成你的仓库地址，
+`author` 改成你的 GitHub 用户名；GitHub Release 附上 `electric_query.zip` 供一键导入。
+同类参考项目：https://github.com/Scarbal486/astrbot_plugin_buaa_power

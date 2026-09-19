@@ -7,14 +7,49 @@ SQLite 历史电量数据存储（山文宿舍电费查询）
 """
 
 import os
+import shutil
 import sqlite3
 import threading
 from datetime import datetime
 
-DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       "electric_history.db")
+# 插件目录：旧版本持久化数据的存放处，用于升级时迁移
+_PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 _lock = threading.Lock()
+_DATA_DIR = None
+
+
+def get_data_dir() -> str:
+    """AstrBot 约定持久化目录 data/plugin_data/electric_query/。
+    独立运行 / 识别不到 AstrBot 环境时回落到插件目录。"""
+    global _DATA_DIR
+    if _DATA_DIR is None:
+        try:
+            from astrbot.core import paths
+            root = getattr(paths, "ASTRBOT_DATA_DIR", None)
+        except Exception:
+            root = None
+        _DATA_DIR = (os.path.join(str(root), "plugin_data", "electric_query")
+                     if root else _PLUGIN_DIR)
+        os.makedirs(_DATA_DIR, exist_ok=True)
+    return _DATA_DIR
+
+
+DB_FILE = os.path.join(get_data_dir(), "electric_history.db")
+
+
+def _migrate_legacy_db() -> None:
+    """v4.5.0 起数据库移到 AstrBot 约定目录；插件目录里的旧库首次启动时自动搬移。"""
+    src = os.path.join(_PLUGIN_DIR, "electric_history.db")
+    if not os.path.exists(src) or os.path.exists(DB_FILE):
+        return
+    for suffix in ("", "-wal", "-shm"):
+        s = src + suffix
+        if os.path.exists(s):
+            try:
+                shutil.copy2(s, DB_FILE + suffix)
+            except OSError:
+                pass
 
 
 def _connect() -> sqlite3.Connection:
@@ -29,6 +64,7 @@ def _connect() -> sqlite3.Connection:
 def init_db() -> None:
     """建表 + 索引。插件启动时调用一次。"""
     with _lock:
+        _migrate_legacy_db()
         conn = _connect()
         try:
             conn.execute(

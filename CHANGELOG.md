@@ -10,11 +10,16 @@
 
 ## [4.5.0] - 2026-09-19
 
+### 新增
+
+- 持久化数据目录改为 AstrBot 约定位置 `data/plugin_data/electric_query/`
+  （会话状态 `data.json` 与历史电量 SQLite 库），符合插件数据迁移与审计规范；
+  旧版本存放在插件目录的数据首次启动时自动搬移，历史记录不丢失、无需手动处理。
+
 ### 修复
 
-- 插件日志接入 AstrBot 日志系统：此前误用了标准 logging，`logger.error/info`
-  不会出现在 AstrBot WebUI 与日志文件中，排障时看不到任何插件输出；现已修复，
-  查询/提醒/预测的日志能在 AstrBot 日志中正常看到。
+- 日志记录器严格使用 AstrBot 日志系统（`from astrbot.api import logger`），
+  移除标准 logging 覆盖，插件日志在 AstrBot WebUI 与日志文件中正常可见。
 - `电费帮助` 对配置数值做了类型防护：手工把 config.json 里的阈值改成字符串时
   不再因格式化报错，直接回落到默认值显示。
 - 修复 `watch_rooms` 配置里冒号写法（如 `5号公寓:206`）解析不到的问题；
