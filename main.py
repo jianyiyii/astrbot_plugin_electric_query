@@ -38,10 +38,10 @@ try:
     # AstrBot >= v3.4 推荐导入路径
     from astrbot.api.star import Context, Star, register
     from astrbot.api.event import filter, AstrMessageEvent
-    from astrbot.api import logger
+    from astrbot.api import logger as _astrbot_logger
 except ImportError:  # 兼容旧版本 AstrBot
     from astrbot.core.star import Context, Star, register
-    from astrbot.api import logger
+    from astrbot.api import logger as _astrbot_logger
     from astrbot.core.star.filter.event import EventType
 
     filter = None
@@ -50,7 +50,8 @@ from . import database
 from . import forecast as forecast_mod
 from . import statistics as stats
 
-logger = logging.getLogger("electric_query")
+# 日志优先接入 AstrBot（WebUI / 日志文件可见）；独立运行等场景回落到标准 logging。
+logger = _astrbot_logger if _astrbot_logger is not None else logging.getLogger("electric_query")
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(PLUGIN_DIR, "data.json")
@@ -226,7 +227,7 @@ class ElectricApiClient:
 # ---------------------------------------------------------------------------
 if filter is not None:
     @register("electric_query", "AstrBot User",
-              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.4.0",
+              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.5.0",
               "https://github.com/YourName/astrbot_plugin_electric_query")
     class ElectricQueryPlugin(Star):
         def __init__(self, context: Context, config: dict = None):
@@ -359,12 +360,13 @@ if filter is not None:
         # ---------------- 房间解析 ----------------
         @staticmethod
         def _parse_room_arg(arg: str):
-            """'2-319' / '319' / '2号公寓-319' -> (楼栋, 房间)。"""
+            """'2-319' / '2:319' / '2号公寓-319' / '2号楼:319' -> (楼栋, 房间)。
+            冒号写法用于 watch_rooms 配置，如 '5号公寓:206'。"""
             arg = arg.strip()
-            m = re.match(r"^(\d+)[-－](\d+)$", arg)
+            m = re.match(r"^(\d+)[-－:：](\d+)$", arg)
             if m:
                 return f"{m.group(1)}号公寓", m.group(2)
-            m = re.match(r"^(\d+)号?公寓[-－](\d+)$", arg)
+            m = re.match(r"^(\d+)[号栋]?(?:公寓|楼)[-－:：](\d+)$", arg)
             if m:
                 return f"{m.group(1)}号公寓", m.group(2)
             return ("", arg if re.match(r"^\d+$", arg) else "")
@@ -614,16 +616,23 @@ if filter is not None:
         # ---------------- 指令：帮助 ----------------
         @filter.command("电费帮助")
         async def help_cmd(self, event: AstrMessageEvent):
+            try:
+                check_h = float(self.cfg.get("check_interval_hours", 6))
+                alert_h = float(self.cfg.get("alert_hours", 12))
+                urgent_h = float(self.cfg.get("urgent_hours", 3))
+                night_t = str(self.cfg.get("night_check_time", "22:00"))
+            except (TypeError, ValueError):
+                check_h, alert_h, urgent_h, night_t = 6, 12, 3, "22:00"
             yield event.plain_result(
                 "📖 山文宿舍电费查询（宿舍电量管家）\n"
                 "· 电费 [房间号]：查剩余电量（如 电费 2-319）\n"
                 "· 用电统计 [房间号]：24h 消耗 / 7 天日均 / 最高耗电时段\n"
                 "· 预测停电 [房间号]：预计断电时间\n"
                 "· 用电趋势 [房间号]：今日 vs 昨日\n"
-                f"· 自动监控：每 {self.cfg.get('check_interval_hours', 6)} 小时，"
-                f"预计断电 <{self.cfg.get('alert_hours', 12):g}h 强提醒、"
-                f"<{self.cfg.get('urgent_hours', 3):g}h 紧急提醒\n"
-                f"· 夜间保护：每天 {self.cfg.get('night_check_time', '22:00')} 检查"
+                f"· 自动监控：每 {check_h:g} 小时，"
+                f"预计断电 <{alert_h:g}h 强提醒、"
+                f"<{urgent_h:g}h 紧急提醒\n"
+                f"· 夜间保护：每天 {night_t} 检查"
             )
 
         # ---------------- 定时监控：预测式分级提醒 ----------------

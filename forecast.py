@@ -58,7 +58,16 @@ def build_hour_profile(points: list, days: int = PROFILE_DAYS,
     """
     now = datetime.now()
     start = now - timedelta(days=days)
-    parsed = sorted((parse_ts(ts), r) for ts, r in points if parse_ts(ts) >= start)
+    parsed = []
+    for ts, r in points:
+        try:
+            dt = parse_ts(ts)
+            rv = float(r)
+        except (ValueError, TypeError):
+            continue  # 跳过异常历史数据（坏时间戳/非数字电量），避免单条脏数据让整个预测失败
+        if dt >= start:
+            parsed.append((dt, rv))
+    parsed.sort(key=lambda x: x[0])
     if len(parsed) < 2:
         return None
 
@@ -293,7 +302,14 @@ def predict(points: list, remaining: float = None, now: datetime = None) -> dict
              "method": "none", "hours24": None, "peaks": [], "profile_days": None}
     if len(points) < 2:
         return empty
-    parsed = [(parse_ts(ts), r) for ts, r in points]
+    parsed = []
+    for ts, r in points:
+        try:
+            parsed.append((parse_ts(ts), float(r)))
+        except (ValueError, TypeError):
+            continue  # 容错：跳过异常历史数据
+    if len(parsed) < 2:
+        return empty
     remaining = remaining if remaining is not None else parsed[-1][1]
     if remaining <= 0:
         return {"rate": None, "hours": 0.0,

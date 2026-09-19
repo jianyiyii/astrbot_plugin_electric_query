@@ -97,8 +97,19 @@ def query_history(room: str, meter_type: str = "",
 
 def latest(room: str, meter_type: str):
     """返回该表最近一条采样 (created_at, remaining_power) 或 None。"""
-    rows = query_history(room, meter_type)
-    return rows[-1] if rows else None
+    sql = "SELECT created_at, remaining_power FROM power_history WHERE room = ?"
+    params = [room]
+    if meter_type:
+        sql += " AND meter_type = ?"
+        params.append(meter_type)
+    sql += " ORDER BY created_at DESC LIMIT 1"
+    with _lock:
+        conn = _connect()
+        try:
+            row = conn.execute(sql, params).fetchone()
+        finally:
+            conn.close()
+    return (row[0], float(row[1])) if row else None
 
 
 def prune_history(keep_days: int = 30) -> None:
