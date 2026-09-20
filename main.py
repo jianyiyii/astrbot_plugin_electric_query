@@ -225,7 +225,7 @@ class ElectricApiClient:
 # ---------------------------------------------------------------------------
 if filter is not None:
     @register("electric_query", "AstrBot User",
-              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.5.0",
+              "山文宿舍电费查询：电费查询/历史统计/断电预测/智能提醒（宿舍电量管家）", "4.6.0",
               "https://github.com/YourName/astrbot_plugin_electric_query")
     class ElectricQueryPlugin(Star):
         def __init__(self, context: Context, config: dict = None):
